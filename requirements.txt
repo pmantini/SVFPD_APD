@@ -1,0 +1,19 @@
+backports.functools-lru-cache==1.6.1
+cycler==0.10.0
+-e git+https://github.com/CharlesShang/DCNv2.git@c7f778f28b84c66d3af2bf16f19148a07051dac1#egg=DCNv2
+future==0.18.2
+futures==3.3.0
+kiwisolver==1.1.0
+matplotlib==2.2.5
+numpy==1.16.6
+opencv-python==4.2.0.32
+Pillow==6.2.2
+pkg-resources==0.0.0
+pyparsing==2.4.7
+python-dateutil==2.8.1
+pytz==2020.4
+six==1.15.0
+subprocess32==3.5.4
+torch==1.4.0
+torchvision==0.5.0
+tqdm==4.51.0
