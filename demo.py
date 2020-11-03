@@ -4,15 +4,18 @@ from peddla import peddla_net
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
-import torch
+import torch, cv2
+from video_cv import *
+from tqdm import tqdm
+import os, json
 
-def parse_args():
-
-    parser = argparse.ArgumentParser(description='Train SiamAF')
-    parser.add_argument('--img_list', type=str, default='files of image list')
-
-    args = parser.parse_args()
-    return args
+# def parse_args():
+#
+#     parser = argparse.ArgumentParser(description='Train SiamAF')
+#     parser.add_argument('--img_list', type=str, default='files of image list')
+#
+#     args = parser.parse_args()
+#     return args
 
 def preprocess(image, mean, std):
     img = (image - mean) / std
@@ -123,14 +126,20 @@ def load_model(model, model_path):
 
     return model
 
-def main():
+def main(file):
+    input_file = file
+
+    output_folder = input_file.rsplit("/", 1)[0].replace("SVFPD", "SVFPD_results")
+
+    output_file = output_folder + "/apd.json"
+
     # BGR
     mean = np.array([0.485, 0.456, 0.406],
-                    dtype=np.float32).reshape(1, 1, 3)
+                    dtype=np.float32).reshape(3, 1, 1)
     std = np.array([0.229, 0.224, 0.225],
-                   dtype=np.float32).reshape(1, 1, 3)
+                   dtype=np.float32).reshape(3, 1, 1)
 
-    args = parse_args()
+
     num_layers = 34
     heads = {'hm': 1, 'wh': 1, 'reg': 2, 'aed': 4}
     model = peddla_net(num_layers, heads, head_conv=256, down_ratio=4).cuda().eval()
@@ -139,34 +148,78 @@ def main():
     model = load_model(model, 'final.pth')
     # torch.cuda.empty_cache()
 
-    file_lists = sorted(glob.glob(args.img_list))
-    for file in file_lists:
+    video_sdv = SceneDatasetVideo(file)
+    actual_size = video_sdv.get_frame_size()
+
+    size = (1024, 2048)
+
+    dataloader_test = get_dataset(file, resizeTo=size, batch_size=1)
+    result_detections = []
+
+    for data in tqdm(dataloader_test):
+        if data == None:
+            break
+        inputs, img_ids = data
+
+        # inputs = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)
+        # inputs *= 255
+
+        # image_s = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)[0]*255
         torch.cuda.synchronize()
-        img = plt.imread(file).astype(np.float32)
-        img_pre = preprocess(img[:, :, ::-1], mean, std)
+        # img = plt.imread(file).astype(np.float32)
+        img_pre = inputs
+
+        img_pre = (img_pre - mean) / std
+        # img_pre = preprocess(img[:, :, ::-1], mean, std)
         img_pre = img_pre.cuda()
 
         with torch.no_grad():
             output = model(img_pre)[-1]
+
         output['hm'].sigmoid_()
         hm, wh, reg, attr = output['hm'], output['wh'], output['reg'], output['aed']
 
         density = attr.pow(2).sum(dim=1, keepdim=True).sqrt()
+
         diversity = torch.div(attr, density)
         boxes = parse_det(hm, wh, reg, density=density, diversity=diversity, score=0.5, down=4)
 
-        if len(boxes) > 0:
-            boxes[:, [2, 3]] -= boxes[:, [0, 1]]
+        for i in range(len(boxes)):
+            x, y, w, h, score = boxes[i]
+            tmp = {}
 
-            fig, ax = plt.subplots(1)
-            ax.imshow(img)
-            for i in range(len(boxes)):
-                x, y, w, h, score = boxes[i]
-                rect = patches.Rectangle((x, y), w, h, linewidth=1, edgecolor='r', facecolor='none')
-                ax.add_patch(rect)
-        else:
-            plt.imshow(img)
-        plt.show()
+            tmp['image_id'] = int(img_ids.numpy()[0] + 1)
+            tmp['category_id'] = int(0)
+            tl_x = x
+            tl_y = y
+
+            br_x = w
+            br_y = h
+            # tmp['bbox'] = [(int((k[0]-k[2]/2)*actual_size[0]), int((k[1]-k[3]/2)*actual_size[1])), (int((k[0]+k[2]/2)*actual_size[0]), int((k[1]+k[3]/2)*actual_size[1]))]
+            tmp['bbox'] = [int(tl_x), int(tl_y),
+                           int(br_x), int(br_y)]
+            tmp['score'] = float(score)
+            result_detections.append(tmp)
+
+    try:
+        os.makedirs(output_folder)
+    except:
+        print("Folder exists!")
+
+    with open(output_file, 'w') as f:
+        json.dump(result_detections, f)
+
 
 if __name__ == "__main__":
-    main()
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser()
+
+    parser.add_argument("-f", "--file", dest="file",
+                        help="specify name of the file", metavar="FILE")
+    parser.add_argument("-o", "--output", dest="output",
+                        help="specify name of the output", metavar="OUTPUT")
+
+    args = parser.parse_args()
+
+    main(args.file)
