@@ -162,22 +162,10 @@ def main(file):
             break
         inputs, img_ids = data
 
-        # inputs = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)
-        # inputs *= 255
-
-        image_s = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)[0]*255
-        image_s = np.array(image_s, dtype=np.uint8)
-        img = cv2.cvtColor(image_s, cv2.COLOR_RGB2BGR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        print(actual_size)
-        img = cv2.resize(img, actual_size)
-
         torch.cuda.synchronize()
-        # img = plt.imread(file).astype(np.float32)
         img_pre = inputs
 
         img_pre = (img_pre - mean) / std
-        # img_pre = preprocess(img[:, :, ::-1], mean, std)
         img_pre = img_pre.cuda()
 
         with torch.no_grad():
@@ -202,9 +190,7 @@ def main(file):
 
             br_x = w
             br_y = h
-            # tmp['bbox'] = [(int((k[0]-k[2]/2)*actual_size[0]), int((k[1]-k[3]/2)*actual_size[1])), (int((k[0]+k[2]/2)*actual_size[0]), int((k[1]+k[3]/2)*actual_size[1]))]
-            # print([int(tl_x), int(tl_y),
-            #                int(br_x), int(br_y)], size, ratio)
+
             bbox = [int(tl_x*ratio[0]), int(tl_y*ratio[1]),
                            int(br_x*ratio[0]), int(br_y*ratio[1])]
 
@@ -213,14 +199,6 @@ def main(file):
 
             tmp['score'] = float(score)
             result_detections.append(tmp)
-            # img_gh = cv2.cvtColor(image_s, cv2.COLOR_RGB2GRAY)
-
-            # img = cv2.rectangle(img, (tmp['bbox'][0], tmp['bbox'][1]), (tmp['bbox'][2], tmp['bbox'][3]), 255, 2)
-        # print(type(image_s))
-        # image_s = np.array(image_s, dtype=np.uint8)
-        # cv2.imshow("image", img)
-        # cv2.waitKey(1)
-
 
     try:
         os.makedirs(output_folder)
