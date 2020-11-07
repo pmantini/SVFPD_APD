@@ -152,6 +152,7 @@ def main(file):
     actual_size = video_sdv.get_frame_size()
 
     size = (1024, 2048)
+    ratio = (float(actual_size[0])/float(size[1]), float(actual_size[1])/float(size[0]))
 
     dataloader_test = get_dataset(file, resizeTo=size, batch_size=1)
     result_detections = []
@@ -164,7 +165,13 @@ def main(file):
         # inputs = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)
         # inputs *= 255
 
-        # image_s = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)[0]*255
+        image_s = np.swapaxes(np.swapaxes(inputs.numpy(), 1, 3), 1, 2)[0]*255
+        image_s = np.array(image_s, dtype=np.uint8)
+        img = cv2.cvtColor(image_s, cv2.COLOR_RGB2BGR)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        print(actual_size)
+        img = cv2.resize(img, actual_size)
+
         torch.cuda.synchronize()
         # img = plt.imread(file).astype(np.float32)
         img_pre = inputs
@@ -196,10 +203,24 @@ def main(file):
             br_x = w
             br_y = h
             # tmp['bbox'] = [(int((k[0]-k[2]/2)*actual_size[0]), int((k[1]-k[3]/2)*actual_size[1])), (int((k[0]+k[2]/2)*actual_size[0]), int((k[1]+k[3]/2)*actual_size[1]))]
-            tmp['bbox'] = [int(tl_x), int(tl_y),
-                           int(br_x), int(br_y)]
+            # print([int(tl_x), int(tl_y),
+            #                int(br_x), int(br_y)], size, ratio)
+            bbox = [int(tl_x*ratio[0]), int(tl_y*ratio[1]),
+                           int(br_x*ratio[0]), int(br_y*ratio[1])]
+
+            tmp['bbox'] = [bbox[1], bbox[0],
+                           bbox[3], bbox[2]]
+
             tmp['score'] = float(score)
             result_detections.append(tmp)
+            # img_gh = cv2.cvtColor(image_s, cv2.COLOR_RGB2GRAY)
+
+            # img = cv2.rectangle(img, (tmp['bbox'][0], tmp['bbox'][1]), (tmp['bbox'][2], tmp['bbox'][3]), 255, 2)
+        # print(type(image_s))
+        # image_s = np.array(image_s, dtype=np.uint8)
+        # cv2.imshow("image", img)
+        # cv2.waitKey(1)
+
 
     try:
         os.makedirs(output_folder)
